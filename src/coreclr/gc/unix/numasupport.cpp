@@ -17,6 +17,7 @@
 int g_highestNumaNode = 0;
 // Is numa available
 bool g_numaAvailable = false;
+#undef TARGET_LINUX
 
 #ifdef TARGET_LINUX
 static int GetNodeNum(const char* path, bool firstOnly)
