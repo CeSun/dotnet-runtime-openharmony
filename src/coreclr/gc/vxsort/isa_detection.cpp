@@ -84,6 +84,7 @@ SupportedISA DetermineSupportedISA()
 
 SupportedISA DetermineSupportedISA()
 {
+    /* 不知道为什么89行会链接失败
     __builtin_cpu_init();
     if (__builtin_cpu_supports("avx2"))
     {
@@ -96,6 +97,8 @@ SupportedISA DetermineSupportedISA()
     {
         return SupportedISA::None;
     }
+    */
+    return SupportedISA::None;
 }
 
 #endif // defined(TARGET_UNIX)
