@@ -299,6 +299,7 @@ EXTERN_C void* QCALLTYPE RhAllocateThunksMapping()
 #else
     if (!PalVirtualProtect(pThunksSection, THUNKS_MAP_SIZE, PAGE_EXECUTE_READ))
     {
+        OH_Print("RhAllocateThunksMapping 3 4");
         PalVirtualFree(pNewMapping, THUNKS_MAP_SIZE * 2);
         return NULL;
     }
@@ -306,7 +307,7 @@ EXTERN_C void* QCALLTYPE RhAllocateThunksMapping()
 
     PalFlushInstructionCache(pThunksSection, THUNKS_MAP_SIZE);
 
-    OH_Print("RhAllocateThunksMapping 3 4");
+    OH_Print("RhAllocateThunksMapping 3 5");
     return pThunksSection;
 }
 
