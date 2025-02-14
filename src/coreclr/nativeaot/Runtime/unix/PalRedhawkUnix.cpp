@@ -43,6 +43,22 @@
 #include <cstdarg>
 #include <signal.h>
 
+typedef int (*fn_hilog_printf)(int type, int level, uint32_t domain, const char* tag, const char *fmt);
+
+static fn_hilog_printf g_hilog_printf = nullptr;
+
+static void OH_Print(const char* fmt)
+{
+    if (g_hilog_printf == nullptr)
+    {
+        auto handle = dlopen("libhilog.so", RTLD_NOW);
+        g_hilog_printf = (fn_hilog_printf)dlsym(handle, "HiLogPrint");
+    }
+    g_hilog_printf(0, 3, 0, "CSharpAOT", fmt);
+
+}
+
+
 #if HAVE_PTHREAD_GETTHREADID_NP
 #include <pthread_np.h>
 #endif
@@ -824,7 +840,9 @@ REDHAWK_PALEXPORT _Ret_maybenull_ _Post_writable_byte_size_(size) void* REDHAWK_
         flags |= MAP_JIT;
     }
 #endif
-
+    char debug[256];
+    snprintf(debug, sizeof(debug), "PalVirtualAlloc unixProtect :%d, flags: %d", unixProtect, flags);
+    OH_Print(debug);
     return mmap(NULL, size, unixProtect, flags, -1, 0);
 }
 
@@ -841,7 +859,17 @@ REDHAWK_PALEXPORT UInt32_BOOL REDHAWK_PALAPI PalVirtualProtect(_In_ void* pAddre
     uint8_t* pPageStart = ALIGN_DOWN((uint8_t*)pAddress, OS_PAGE_SIZE);
     size_t memSize = ALIGN_UP((uint8_t*)pAddress + size, OS_PAGE_SIZE) - pPageStart;
 
-    return mprotect(pPageStart, memSize, unixProtect) == 0;
+    char debug[256];
+    snprintf(debug, sizeof(debug), "PalVirtualFree unixProtect :%d, size: %u", unixProtect, size);
+    OH_Print(debug);
+    
+    auto ret = mprotect(pPageStart, memSize, unixProtect);
+    if (ret != 0)
+    {
+        snprintf(debug, sizeof(debug), "PalVirtualFree errno  %d: %s",  errno, strerror(errno));
+        OH_Print(debug);
+    }
+    return ret == 0;
 }
 
 #if (defined(HOST_MACCATALYST) || defined(HOST_IOS) || defined(HOST_TVOS)) && defined(HOST_ARM64)

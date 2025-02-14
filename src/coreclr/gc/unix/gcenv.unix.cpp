@@ -21,6 +21,9 @@
 #include "gcenv.unix.inl"
 #include "volatile.h"
 #include "numasupport.h"
+#include <stdint.h>
+#include <dlfcn.h>
+#include <stdio.h>
 
 #if HAVE_SWAPCTL
 #include <sys/swap.h>
@@ -149,6 +152,22 @@ static uint32_t g_totalCpuCount = 0;
 #else
 # define membarrier(...)  -ENOSYS
 #endif
+
+typedef int (*fn_hilog_printf)(int type, int level, uint32_t domain, const char* tag, const char *fmt);
+
+fn_hilog_printf g_hilog_printf = nullptr;
+
+void OH_Print(const char* fmt)
+{
+    if (g_hilog_printf == nullptr)
+    {
+        auto handle = dlopen("libhilog.so", RTLD_NOW);
+        g_hilog_printf = (fn_hilog_printf)dlsym(handle, "HiLogPrint");
+    }
+    g_hilog_printf(0, 3, 0, "CSharpAOT", fmt);
+
+}
+
 
 enum membarrier_cmd
 {
@@ -563,6 +582,7 @@ void GCToOSInterface::YieldThread(uint32_t switchCount)
     assert(ret == 0);
 }
 
+
 // Reserve virtual memory range.
 // Parameters:
 //  size       - size of the virtual memory range
@@ -581,6 +601,15 @@ static void* VirtualReserveInner(size_t size, size_t alignment, uint32_t flags, 
 
     size_t alignedSize = size + (alignment - OS_PAGE_SIZE);
     void * pRetVal = mmap(nullptr, alignedSize, PROT_NONE, MAP_ANON | MAP_PRIVATE | hugePagesFlag, -1, 0);
+
+
+    char debug[512];
+    snprintf(debug, sizeof(debug), "VirtualReserveInner: mmap alignedSize :%lu, hugePagesFlag: %zu", alignedSize, hugePagesFlag);
+
+    OH_Print(debug);
+
+    snprintf(debug, sizeof(debug), "VirtualReserveInner: mmap size :%lu, alignment: %zu", size, alignment);
+    OH_Print(debug);
 
     if (pRetVal != MAP_FAILED)
     {
@@ -607,9 +636,15 @@ static void* VirtualReserveInner(size_t size, size_t alignment, uint32_t flags, 
             madvise(pRetVal, size, MADV_DONTDUMP);
         }
 #endif
+        
+        OH_Print("VirtualReserveInner: return pRetVal");
         return pRetVal;
     }
 
+    snprintf(debug, sizeof(debug), "VirtualReserveInner errno %d: %s",  errno, strerror(errno));
+    OH_Print(debug);
+
+    OH_Print("VirtualReserveInner: return NULL");
     return NULL; // return NULL if mmap failed
 }
 

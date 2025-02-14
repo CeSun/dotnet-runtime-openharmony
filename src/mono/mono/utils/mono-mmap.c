@@ -250,9 +250,11 @@ mono_valloc (void *addr, size_t length, int flags, MonoMemAccountType type)
 	int mflags = 0;
 	int prot = prot_from_flags (flags);
 
+	g_debug("[sunce] mono_valloc 1");
 	if (!mono_valloc_can_alloc (length))
 		return NULL;
 
+	g_debug("[sunce] mono_valloc 2");
 	/* translate the flags */
 	if (flags & MONO_MMAP_FIXED)
 		mflags |= MAP_FIXED;
@@ -294,23 +296,30 @@ mono_valloc (void *addr, size_t length, int flags, MonoMemAccountType type)
 
 	mflags |= MAP_ANONYMOUS;
 	mflags |= MAP_PRIVATE;
-
+	errno = 0;
 	BEGIN_CRITICAL_SECTION;
+	
+		g_debug("[sunce] mono_valloc test addr: %p, length: %llu, prot: %d, mflags: %d", addr, length, prot, mflags);
 	ptr = mmap (addr, length, prot, mflags, -1, 0);
+	g_debug("[sunce] mono_valloc 4, errno: %d", errno);
 	if (ptr == MAP_FAILED) {
+		g_debug("[sunce] mono_valloc 5");
 		int fd = open ("/dev/zero", O_RDONLY);
 		if (fd != -1) {
-			ptr = mmap (addr, length, prot, mflags, fd, 0);
+			g_debug("[sunce] mono_valloc 6");
+			ptr = mmap (addr, length, prot, 0x01, fd, 0);
 			close (fd);
 		}
 	}
 	END_CRITICAL_SECTION;
-
+	g_debug("[sunce] mono_valloc 7, errno: %d", errno);
 	if (ptr == MAP_FAILED)
 		return NULL;
 
+	g_debug("[sunce] mono_valloc 8");
 	mono_account_mem (type, (ssize_t)length);
 
+	g_debug("[sunce] mono_valloc 9");
 	return ptr;
 }
 

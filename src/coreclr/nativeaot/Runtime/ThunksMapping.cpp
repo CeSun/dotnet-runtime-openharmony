@@ -11,6 +11,25 @@
 #include "PalRedhawk.h"
 #include "rhassert.h"
 
+#include <stdint.h>
+#include <dlfcn.h>
+#include <stdio.h>
+
+typedef int (*fn_hilog_printf)(int type, int level, uint32_t domain, const char* tag, const char *fmt);
+
+static fn_hilog_printf g_hilog_printf = nullptr;
+
+static void OH_Print(const char* fmt)
+{
+    if (g_hilog_printf == nullptr)
+    {
+        auto handle = dlopen("libhilog.so", RTLD_NOW);
+        g_hilog_printf = (fn_hilog_printf)dlsym(handle, "HiLogPrint");
+    }
+    g_hilog_printf(0, 3, 0, "CSharpAOT", fmt);
+
+}
+
 
 #ifdef FEATURE_RX_THUNKS
 
@@ -100,6 +119,7 @@ FCIMPLEND
 
 EXTERN_C void* QCALLTYPE RhAllocateThunksMapping()
 {
+    OH_Print("RhAllocateThunksMapping 3 1");
 #ifdef WIN32
 
     void * pNewMapping = PalVirtualAlloc(THUNKS_MAP_SIZE * 2, PAGE_READWRITE);
@@ -118,7 +138,10 @@ EXTERN_C void* QCALLTYPE RhAllocateThunksMapping()
     // changed anymore.
     void * pNewMapping = PalVirtualAlloc(THUNKS_MAP_SIZE * 2, PAGE_EXECUTE_READ);
     if (pNewMapping == NULL)
+    {
+        OH_Print("RhAllocateThunksMapping 3 2");
         return NULL;
+    }
 
     void * pThunksSection = pNewMapping;
     void * pDataSection = (uint8_t*)pNewMapping + THUNKS_MAP_SIZE;
@@ -127,6 +150,8 @@ EXTERN_C void* QCALLTYPE RhAllocateThunksMapping()
         !PalVirtualProtect(pThunksSection, THUNKS_MAP_SIZE, PAGE_EXECUTE_READWRITE))
     {
         PalVirtualFree(pNewMapping, THUNKS_MAP_SIZE * 2);
+        
+        OH_Print("RhAllocateThunksMapping 3 3");
         return NULL;
     }
 
@@ -281,6 +306,7 @@ EXTERN_C void* QCALLTYPE RhAllocateThunksMapping()
 
     PalFlushInstructionCache(pThunksSection, THUNKS_MAP_SIZE);
 
+    OH_Print("RhAllocateThunksMapping 3 4");
     return pThunksSection;
 }
 
@@ -298,6 +324,8 @@ FCDECL1(void*, RhpGetThunkStubsBlockAddress, void* addr);
 
 EXTERN_C void* QCALLTYPE RhAllocateThunksMapping()
 {
+
+    OH_Print("RhAllocateThunksMapping 1");
     static int nextThunkDataMapping = 0;
 
     int thunkBlocksPerMapping = RhpGetNumThunkBlocksPerMapping();
@@ -351,6 +379,8 @@ FCDECL0(int, RhpGetThunkBlockSize);
 
 EXTERN_C void* QCALLTYPE RhAllocateThunksMapping()
 {
+    
+    OH_Print("RhAllocateThunksMapping 2");
     static void* pThunksTemplateAddress = NULL;
 
     void *pThunkMap = NULL;

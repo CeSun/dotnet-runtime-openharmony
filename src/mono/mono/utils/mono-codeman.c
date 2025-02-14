@@ -109,6 +109,7 @@ static MonoNativeTlsKey write_level_tls_id;
 static void*
 codechunk_valloc (void *preferred, guint32 size, gboolean no_exec)
 {
+	g_debug("[sunce] codechunk_valloc 1");
 	void *ptr;
 	GSList *freelist;
 
@@ -123,6 +124,7 @@ codechunk_valloc (void *preferred, guint32 size, gboolean no_exec)
 	mono_os_mutex_lock (&valloc_mutex);
 	freelist = (GSList *) g_hash_table_lookup (valloc_freelists, GUINT_TO_POINTER (size));
 	if (freelist) {
+		g_debug("[sunce] codechunk_valloc 2");
 		ptr = freelist->data;
 		mono_codeman_enable_write ();
 		memset (ptr, 0, size);
@@ -130,6 +132,7 @@ codechunk_valloc (void *preferred, guint32 size, gboolean no_exec)
 		freelist = g_slist_delete_link (freelist, freelist);
 		g_hash_table_insert (valloc_freelists, GUINT_TO_POINTER (size), freelist);
 	} else {
+		g_debug("[sunce] codechunk_valloc 3");
 		int prot;
 		if (!no_exec)
 			prot = MONO_PROT_RWX | ARCH_MAP_FLAGS;
@@ -137,7 +140,10 @@ codechunk_valloc (void *preferred, guint32 size, gboolean no_exec)
 			prot = MONO_PROT_RW | ARCH_MAP_FLAGS;
 		ptr = mono_valloc (preferred, size, prot, MONO_MEM_ACCOUNT_CODE);
 		if (!ptr && preferred)
+		{
+			g_debug("[sunce] codechunk_valloc 4");
 			ptr = mono_valloc (NULL, size, prot, MONO_MEM_ACCOUNT_CODE);
+		}
 	}
 	mono_os_mutex_unlock (&valloc_mutex);
 	return ptr;
@@ -492,6 +498,7 @@ mono_code_manager_foreach (MonoCodeManager *cman, MonoCodeManagerFunc func, void
 static CodeChunk*
 new_codechunk (MonoCodeManager *cman, int size)
 {
+	g_debug("[sunce] new_codechunk 1");
 	CodeChunk * const last = cman->last;
 	int const dynamic = cman->dynamic;
 	int const no_exec = cman->no_exec;
@@ -541,17 +548,27 @@ new_codechunk (MonoCodeManager *cman, int size)
 
 	if (flags == CODE_FLAG_MALLOC) {
 		ptr = mono_codeman_malloc (chunk_size + MIN_ALIGN - 1);
+		g_debug("[sunce] new_codechunk 2");
 		if (!ptr)
 			return NULL;
+		g_debug("[sunce] new_codechunk 3");
 	} else {
 		/* Try to allocate code chunks next to each other to help the VM */
 		ptr = NULL;
 		if (last)
+		{
+			g_debug("[sunce] new_codechunk 4");
 			ptr = codechunk_valloc ((guint8*)last->data + last->size, chunk_size, no_exec);
+		}
 		if (!ptr)
+		{
+			g_debug("[sunce] new_codechunk 5");
 			ptr = codechunk_valloc (NULL, chunk_size, no_exec);
+		}
+		g_debug("[sunce] new_codechunk 6");
 		if (!ptr)
 			return NULL;
+		g_debug("[sunce] new_codechunk 7");
 	}
 
 #ifdef BIND_ROOM
@@ -569,8 +586,10 @@ new_codechunk (MonoCodeManager *cman, int size)
 			mono_codeman_free (ptr);
 		else
 			mono_vfree (ptr, chunk_size, MONO_MEM_ACCOUNT_CODE);
+		g_debug("[sunce] new_codechunk 8");
 		return NULL;
 	}
+	g_debug("[sunce] new_codechunk 9");
 	chunk->next = NULL;
 	chunk->size = chunk_size;
 	chunk->data = (char *) ptr;
@@ -583,7 +602,8 @@ new_codechunk (MonoCodeManager *cman, int size)
 
 	code_memory_used += chunk_size;
 	mono_runtime_resource_check_limit (MONO_RESOURCE_JIT_CODE, code_memory_used);
-	/*printf ("code chunk at: %p\n", ptr);*/
+	g_debug("[sunce] new_codechunk 10");
+	g_debug ("code chunk at: %p\n", ptr);
 	return chunk;
 }
 
@@ -598,6 +618,7 @@ new_codechunk (MonoCodeManager *cman, int size)
 void*
 mono_code_manager_reserve_align (MonoCodeManager *cman, int size, int alignment)
 {
+	g_debug("[sunce] mono_code_manager_reserve_align 1");
 	CodeChunk *chunk, *prev;
 	void *ptr;
 	guint32 align_mask = alignment - 1;
@@ -616,11 +637,13 @@ mono_code_manager_reserve_align (MonoCodeManager *cman, int size, int alignment)
 
 	if (!cman->current) {
 		cman->current = new_codechunk (cman, size);
+		g_debug("[sunce] mono_code_manager_reserve_align 2");
 		if (!cman->current)
 			return NULL;
 		cman->last = cman->current;
 	}
 
+	g_debug("[sunce] mono_code_manager_reserve_align 3");
 	for (chunk = cman->current; chunk; chunk = chunk->next) {
 		if (ALIGN_INT (chunk->pos, alignment) + size <= chunk->size) {
 			chunk->pos = ALIGN_INT (chunk->pos, alignment);
@@ -628,6 +651,7 @@ mono_code_manager_reserve_align (MonoCodeManager *cman, int size, int alignment)
 			/* or we can't guarantee proper alignment     */
 			ptr = (void*)((((uintptr_t)chunk->data + align_mask) & ~(uintptr_t)align_mask) + chunk->pos);
 			chunk->pos = GPTRDIFF_TO_INT (((char*)ptr - chunk->data) + size);
+			g_debug("[sunce] mono_code_manager_reserve_align 4");
 			return ptr;
 		}
 	}
@@ -649,8 +673,10 @@ mono_code_manager_reserve_align (MonoCodeManager *cman, int size, int alignment)
 		break;
 	}
 	chunk = new_codechunk (cman, size);
+	g_debug("[sunce] mono_code_manager_reserve_align 5");
 	if (!chunk)
 		return NULL;
+	g_debug("[sunce] mono_code_manager_reserve_align 6");
 	chunk->next = cman->current;
 	cman->current = chunk;
 	cman->last = cman->current;
@@ -659,6 +685,7 @@ mono_code_manager_reserve_align (MonoCodeManager *cman, int size, int alignment)
 	/* or we can't guarantee proper alignment     */
 	ptr = (void*)((((uintptr_t)chunk->data + align_mask) & ~(uintptr_t)align_mask) + chunk->pos);
 	chunk->pos = GPTRDIFF_TO_INT (((char*)ptr - chunk->data) + size);
+	g_debug("[sunce] mono_code_manager_reserve_align 7");
 	return ptr;
 }
 

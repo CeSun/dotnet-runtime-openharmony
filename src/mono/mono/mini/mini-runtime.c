@@ -400,6 +400,7 @@ void *(mono_global_codeman_reserve) (int size)
 		g_error ("Attempting to allocate from the global code manager while running in aot-only mode.\n");
 
 	if (!global_codeman) {
+		g_debug("[sunce] global_codeman == false");
 		/* This can happen during startup */
 		if (!mono_compile_aot)
 			global_codeman = mono_code_manager_new ();
@@ -408,6 +409,7 @@ void *(mono_global_codeman_reserve) (int size)
 		ptr = mono_code_manager_reserve (global_codeman, size);
 	}
 	else {
+		g_debug("[sunce] global_codeman == true");
 		mono_jit_lock ();
 		ptr = mono_code_manager_reserve (global_codeman, size);
 		mono_jit_unlock ();

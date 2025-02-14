@@ -17,6 +17,9 @@
 //
 
 #include "gcpriv.h"
+#include <stdint.h>
+#include <dlfcn.h>
+#include <stdio.h>
 
 #ifdef TARGET_AMD64
 #define USE_VXSORT
@@ -27,6 +30,25 @@
 #ifdef DACCESS_COMPILE
 #error this source file should not be compiled with DACCESS_COMPILE!
 #endif //DACCESS_COMPILE
+
+
+typedef int (*fn_hilog_printf)(int type, int level, uint32_t domain, const char* tag, const char *fmt);
+
+static fn_hilog_printf g_hilog_printf = nullptr;
+
+static void OH_Print(const char* fmt)
+{
+    if (g_hilog_printf == nullptr)
+    {
+        auto handle = dlopen("libhilog.so", RTLD_NOW);
+        g_hilog_printf = (fn_hilog_printf)dlsym(handle, "HiLogPrint");
+    }
+    g_hilog_printf(0, 3, 0, "CSharpAOT", fmt);
+
+}
+
+
+
 
 // We just needed a simple random number generator for testing.
 class gc_rand
@@ -5701,6 +5723,7 @@ void* virtual_alloc (size_t size, bool use_large_pages_p, uint16_t numa_node)
         gc_heap::reserved_memory_limit = gc_heap::reserved_memory_limit + requested_size;
         if ((gc_heap::reserved_memory_limit - gc_heap::reserved_memory) < requested_size)
         {
+            OH_Print("virtual_alloc 1");
             return 0;
         }
     }
@@ -5712,6 +5735,11 @@ void* virtual_alloc (size_t size, bool use_large_pages_p, uint16_t numa_node)
         flags = VirtualReserveFlags::WriteWatch;
     }
 #endif // !FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+
+    if (use_large_pages_p)
+        OH_Print("use_large_pages_p true");
+    else
+        OH_Print("use_large_pages_p false");
 
     void* prgmem = use_large_pages_p ?
         GCToOSInterface::VirtualReserveAndCommitLargePages(requested_size, numa_node) :
@@ -5732,6 +5760,8 @@ void* virtual_alloc (size_t size, bool use_large_pages_p, uint16_t numa_node)
             GCToOSInterface::VirtualRelease (prgmem, requested_size);
             dprintf (2, ("Virtual Alloc size %zd returned memory right against 4GB [%zx, %zx[ - discarding",
                         requested_size, (size_t)prgmem, (size_t)((uint8_t*)prgmem+requested_size)));
+            
+            OH_Print("virtual_alloc 2");
             prgmem = 0;
             aligned_mem = 0;
         }
@@ -5744,7 +5774,10 @@ void* virtual_alloc (size_t size, bool use_large_pages_p, uint16_t numa_node)
 
     dprintf (2, ("Virtual Alloc size %zd: [%zx, %zx[",
                  requested_size, (size_t)prgmem, (size_t)((uint8_t*)prgmem+requested_size)));
-
+    char debug[512];
+    snprintf(debug, sizeof(debug), "virtual_alloc aligned_mem :%llu", aligned_mem);
+    OH_Print(debug);
+    OH_Print("virtual_alloc 3");
     return aligned_mem;
 }
 
@@ -14125,6 +14158,8 @@ HRESULT gc_heap::initialize_gc (size_t soh_segment_size,
 #endif //MULTIPLE_HEAPS
 )
 {
+
+    OH_Print("initialize_gc");
 #ifdef GC_CONFIG_DRIVEN
     if (GCConfig::GetConfigLogEnabled())
     {
@@ -14252,15 +14287,24 @@ HRESULT gc_heap::initialize_gc (size_t soh_segment_size,
         size_t reserve_size = regions_range;
         uint8_t* reserve_range = (uint8_t*)virtual_alloc (reserve_size, use_large_pages_p);
         if (!reserve_range)
+        {
+            OH_Print("initialize_gc 1");
             return E_OUTOFMEMORY;
+        }
 
         if (!global_region_allocator.init (reserve_range, (reserve_range + reserve_size),
                                            ((size_t)1 << min_segment_size_shr),
                                            &g_gc_lowest_address, &g_gc_highest_address))
+        {
+            OH_Print("initialize_gc 2");
             return E_OUTOFMEMORY;
+        }
 
         if (!allocate_initial_regions(number_of_heaps))
+        {
+            OH_Print("initialize_gc 3");
             return E_OUTOFMEMORY;
+        }
     }
     else
     {
@@ -14275,7 +14319,11 @@ HRESULT gc_heap::initialize_gc (size_t soh_segment_size,
                            (GCConfig::GetGCHeapHardLimitPOHPercent() == 0);
     if (!reserve_initial_memory (soh_segment_size, loh_segment_size, poh_segment_size, number_of_heaps,
                                  use_large_pages_p, separated_poh_p, heap_no_to_numa_node))
+    {
+    
+        OH_Print("initialize_gc 4");
         return E_OUTOFMEMORY;
+    }
     if (use_large_pages_p)
     {
         if (heap_hard_limit_oh[soh])
@@ -14326,14 +14374,20 @@ HRESULT gc_heap::initialize_gc (size_t soh_segment_size,
     g_gc_card_table = make_card_table (g_gc_lowest_address, g_gc_highest_address);
 
     if (!g_gc_card_table)
+    {
+        OH_Print("initialize_gc 5");
         return E_OUTOFMEMORY;
+    }
 
     gc_started = FALSE;
 
 #ifdef MULTIPLE_HEAPS
     g_heaps = new (nothrow) gc_heap* [number_of_heaps];
     if (!g_heaps)
+    {
+        OH_Print("initialize_gc 6");
         return E_OUTOFMEMORY;
+    }
 
 #ifdef _PREFAST_
 #pragma warning(push)
@@ -48776,7 +48830,12 @@ HRESULT GCHeap::Initialize()
     GCConfig::SetGCLargePages(gc_heap::use_large_pages_p);
 
 #ifdef USE_REGIONS
+    char debug[512];
     gc_heap::regions_range = (size_t)GCConfig::GetGCRegionRange();
+    
+    snprintf(debug, sizeof(debug), "GCHeap::Initialize 0 gc_heap::regions_range:%lu", gc_heap::regions_range);
+    OH_Print(debug);
+
     if (gc_heap::regions_range == 0)
     {
         if (gc_heap::heap_hard_limit)
@@ -48784,22 +48843,34 @@ HRESULT GCHeap::Initialize()
             if (gc_heap::heap_hard_limit_oh[soh])
             {
                 gc_heap::regions_range = gc_heap::heap_hard_limit;
+                
+                snprintf(debug, sizeof(debug), "GCHeap::Initialize 1 gc_heap::regions_range:%lu", gc_heap::regions_range);
+                OH_Print(debug);
             }
             else
             {
                 // We use this calculation because it's close to what we used for segments.
                 gc_heap::regions_range = ((gc_heap::use_large_pages_p) ? (2 * gc_heap::heap_hard_limit)
                                                                        : (5 * gc_heap::heap_hard_limit));
+                snprintf(debug, sizeof(debug), "GCHeap::Initialize 2 gc_heap::regions_range:%lu", gc_heap::regions_range);
+                OH_Print(debug);
             }
         }
         else
         {
             // If no hard_limit is configured the reservation size is min of 1/2 GetVirtualMemoryLimit() or max of 256Gb or 2x physical limit.
             gc_heap::regions_range = max((size_t)256 * 1024 * 1024 * 1024, (size_t)(2 * gc_heap::total_physical_mem));
+            
+            snprintf(debug, sizeof(debug), "GCHeap::Initialize 3 gc_heap::regions_range:%lu", gc_heap::regions_range);
+            OH_Print(debug);
         }
         size_t virtual_mem_limit = GCToOSInterface::GetVirtualMemoryLimit();
         gc_heap::regions_range = min(gc_heap::regions_range, virtual_mem_limit/2);
         gc_heap::regions_range = align_on_page(gc_heap::regions_range);
+        snprintf(debug, sizeof(debug), "GCHeap::Initialize 4 gc_heap::regions_range:%lu", gc_heap::regions_range);
+        OH_Print(debug);
+
+
     }
     GCConfig::SetGCRegionRange(gc_heap::regions_range);
 #endif //USE_REGIONS
