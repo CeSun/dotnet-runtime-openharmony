@@ -807,18 +807,23 @@ static int W32toUnixAccessControl(uint32_t flProtect)
     switch (flProtect & 0xff)
     {
     case PAGE_NOACCESS:
+        OH_Print("W32toUnixAccessControl: PROT_NONE");
         prot = PROT_NONE;
         break;
     case PAGE_READWRITE:
+        OH_Print("W32toUnixAccessControl: PROT_READ | PROT_WRITE");
         prot = PROT_READ | PROT_WRITE;
         break;
     case PAGE_EXECUTE_READ:
+        OH_Print("W32toUnixAccessControl: PROT_READ | PROT_EXEC");
         prot = PROT_READ | PROT_EXEC;
         break;
     case PAGE_EXECUTE_READWRITE:
+        OH_Print("W32toUnixAccessControl: PROT_READ | PROT_WRITE | PROT_EXEC");
         prot = PROT_READ | PROT_WRITE | PROT_EXEC;
         break;
     case PAGE_READONLY:
+        OH_Print("W32toUnixAccessControl: PROT_READ");
         prot = PROT_READ;
         break;
     default:
@@ -841,9 +846,15 @@ REDHAWK_PALEXPORT _Ret_maybenull_ _Post_writable_byte_size_(size) void* REDHAWK_
     }
 #endif
     char debug[256];
-    snprintf(debug, sizeof(debug), "PalVirtualAlloc unixProtect :%d, flags: %d", unixProtect, flags);
+    snprintf(debug, sizeof(debug), "PalVirtualAlloc size: %u, unixProtect :%d, flags: %d", size, unixProtect, flags);
     OH_Print(debug);
-    return mmap(NULL, size, unixProtect, flags, -1, 0);
+    auto rtl = mmap(NULL, size, unixProtect, flags, -1, 0);
+
+    if (rtl == MAP_FAILED)
+    {
+        return NULL;
+    }
+    return rtl;
 }
 
 REDHAWK_PALEXPORT void REDHAWK_PALAPI PalVirtualFree(_In_ void* pAddress, size_t size)
@@ -860,13 +871,13 @@ REDHAWK_PALEXPORT UInt32_BOOL REDHAWK_PALAPI PalVirtualProtect(_In_ void* pAddre
     size_t memSize = ALIGN_UP((uint8_t*)pAddress + size, OS_PAGE_SIZE) - pPageStart;
 
     char debug[256];
-    snprintf(debug, sizeof(debug), "PalVirtualFree unixProtect :%d, size: %u", unixProtect, size);
+    snprintf(debug, sizeof(debug), "PalVirtualProtect unixProtect :%d, size: %u", unixProtect, size);
     OH_Print(debug);
     
     auto ret = mprotect(pPageStart, memSize, unixProtect);
     if (ret != 0)
     {
-        snprintf(debug, sizeof(debug), "PalVirtualFree errno  %d: %s",  errno, strerror(errno));
+        snprintf(debug, sizeof(debug), "PalVirtualProtect errno  %d: %s",  errno, strerror(errno));
         OH_Print(debug);
     }
     return ret == 0;
