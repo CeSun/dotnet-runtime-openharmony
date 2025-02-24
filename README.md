@@ -1,3 +1,5 @@
+Move to [https://github.com/OpenHarmony-NET/runtime](https://github.com/OpenHarmony-NET/runtime)
+
 # .NET Runtime
 
 [![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/runtime/runtime?branchName=main)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=129&branchName=main)
